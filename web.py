@@ -168,7 +168,7 @@ async def main():
 
     # 增加启动超时时间以支持大量凭证的场景
     config.startup_timeout = 120  # 2分钟启动超时
-    config.websocket_ping_interval = 20  # 必须设置为 20 秒
+    config.websocket_ping_interval = 10  # 必须设置为 10 秒
 
     await serve(app, config)
 
