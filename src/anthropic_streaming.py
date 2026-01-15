@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 from typing import Any, AsyncIterator, Dict, Optional
+from src.anthropic_converter import _save_tool_signature, _get_cached_signature
 
 from log import log
 
@@ -205,6 +206,7 @@ async def antigravity_sse_to_anthropic_sse(
 
             response = data.get("response", {}) or {}
             candidate = (response.get("candidates", []) or [{}])[0] or {}
+            responseId = response.get("responseId", "")
             parts = (candidate.get("content", {}) or {}).get("parts", []) or []
 
             # 在任意 chunk 中尽早捕获 usageMetadata（优先选择字段更完整的一侧）
@@ -381,12 +383,12 @@ async def antigravity_sse_to_anthropic_sse(
                     tool_args = _remove_nulls_for_tool_input(fc.get("args", {}) or {})
 
                     # 提取 thoughtSignature（如果存在）
-                    thought_signature = part.get("thoughtSignature")
+                    thought_signature = part.get("thoughtSignature") or _get_cached_signature(str(responseId))
 
                     # 如果有 signature，保存到全局缓存
                     if thought_signature:
-                        from src.anthropic_converter import _save_tool_signature
                         _save_tool_signature(tool_id, thought_signature)
+                        _save_tool_signature(responseId, thought_signature)
 
                     idx = state._next_index()
                     evt_start = _sse_event(

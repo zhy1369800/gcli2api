@@ -10,7 +10,7 @@ import json
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
+from src.anthropic_converter import _save_tool_signature, _get_cached_signature
 from log import log
 
 from .antigravity_api import (
@@ -249,6 +249,7 @@ def _convert_antigravity_response_to_anthropic_message(
     fallback_input_tokens: int = 0,
 ) -> Dict[str, Any]:
     candidate = response_data.get("response", {}).get("candidates", [{}])[0] or {}
+    responseId = response_data.get("response", {}).get("responseId", "")
     parts = candidate.get("content", {}).get("parts", []) or []
     usage_metadata = _pick_usage_metadata_from_antigravity_response(response_data)
 
@@ -276,13 +277,13 @@ def _convert_antigravity_response_to_anthropic_message(
             fc = part.get("functionCall", {}) or {}
 
             # 提取 thoughtSignature（如果存在）
-            thought_signature = part.get("thoughtSignature")
+            thought_signature = part.get("thoughtSignature")  or _get_cached_signature(str(responseId))
             tool_id = fc.get("id") or f"toolu_{uuid.uuid4().hex}"
 
             # 如果有 signature，保存到全局缓存
             if thought_signature:
-                from src.anthropic_converter import _save_tool_signature
                 _save_tool_signature(tool_id, thought_signature)
+                _save_tool_signature(responseId, thought_signature)
 
             content.append(
                 {
@@ -365,6 +366,9 @@ async def anthropic_messages(
 
     _debug_log_request_payload(request, payload)
 
+    if _anthropic_debug_enabled():
+        log.info(f"[ANTHROPIC][DEBUG] 请求payload={_json_dumps_for_log(payload)}")
+        
         # 检查是否包含 web_search 工具
     tools = payload.get("tools", [])
     if isinstance(tools, list):
